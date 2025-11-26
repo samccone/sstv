@@ -2,9 +2,7 @@
  * Common utilities for logging and progress
  */
 
-const readline = require('readline');
-
-function log_message(message = "", err = false, recur = false) {
+export function log_message(message: string = "", err: boolean = false, recur: boolean = false): void {
     if (recur) {
         process.stdout.write(`\r${message}`);
     } else {
@@ -16,7 +14,7 @@ function log_message(message = "", err = false, recur = false) {
     }
 }
 
-function progress_bar(current, total, message = "") {
+export function progress_bar(current: number, total: number, message: string = ""): void {
     const width = 30;
     const percent = current / total;
     const filled = Math.round(width * percent);
@@ -30,8 +28,3 @@ function progress_bar(current, total, message = "") {
         process.stdout.write('\n');
     }
 }
-
-module.exports = {
-    log_message,
-    progress_bar
-};

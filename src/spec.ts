@@ -2,14 +2,43 @@
  * Constants for SSTV specification and each supported mode
  */
 
-const COL_FMT = {
-    RGB: 1,
-    GBR: 2,
-    YUV: 3,
-    BW: 4
-};
+export enum COL_FMT {
+    RGB = 1,
+    GBR = 2,
+    YUV = 3,
+    BW = 4
+}
 
-class M1 {
+export interface SSTVMode {
+    NAME: string;
+    COLOR?: COL_FMT;
+    LINE_WIDTH: number;
+    LINE_COUNT: number;
+    SCAN_TIME: number;
+    SYNC_PULSE: number;
+    SYNC_PORCH: number;
+    SEP_PULSE: number;
+    SEP_PORCH?: number;
+
+    CHAN_COUNT: number;
+    CHAN_SYNC?: number;
+    CHAN_TIME: number;
+    HALF_SCAN_TIME?: number;
+    HALF_CHAN_TIME?: number;
+
+    CHAN_OFFSETS: number[];
+
+    LINE_TIME: number;
+    PIXEL_TIME: number;
+    HALF_PIXEL_TIME?: number;
+    WINDOW_FACTOR: number;
+
+    HAS_START_SYNC: boolean;
+    HAS_HALF_SCAN: boolean;
+    HAS_ALT_SCAN: boolean;
+}
+
+export class M1 {
     static get NAME() { return "Martin 1"; }
     static get COLOR() { return COL_FMT.GBR; }
     static get LINE_WIDTH() { return 320; }
@@ -39,7 +68,7 @@ class M1 {
     static get HAS_ALT_SCAN() { return false; }
 }
 
-class M2 extends M1 {
+export class M2 extends M1 {
     static get NAME() { return "Martin 2"; }
     static get LINE_WIDTH() { return 320; }
     static get SCAN_TIME() { return 0.073216; }
@@ -61,7 +90,7 @@ class M2 extends M1 {
     static get WINDOW_FACTOR() { return 4.68; }
 }
 
-class S1 {
+export class S1 {
     static get NAME() { return "Scottie 1"; }
     static get COLOR() { return COL_FMT.GBR; }
     static get LINE_WIDTH() { return 320; }
@@ -91,7 +120,7 @@ class S1 {
     static get HAS_ALT_SCAN() { return false; }
 }
 
-class S2 extends S1 {
+export class S2 extends S1 {
     static get NAME() { return "Scottie 2"; }
     static get LINE_WIDTH() { return 320; }
     static get SCAN_TIME() { return 0.088064; }
@@ -113,7 +142,7 @@ class S2 extends S1 {
     static get WINDOW_FACTOR() { return 3.82; }
 }
 
-class SDX extends S2 {
+export class SDX extends S2 {
     static get NAME() { return "Scottie DX"; }
     static get LINE_WIDTH() { return 320; }
     static get SCAN_TIME() { return 0.345600; }
@@ -135,7 +164,7 @@ class SDX extends S2 {
     static get WINDOW_FACTOR() { return 0.98; }
 }
 
-class R36 {
+export class R36 {
     static get NAME() { return "Robot 36"; }
     static get COLOR() { return COL_FMT.YUV; }
     static get LINE_WIDTH() { return 320; }
@@ -167,7 +196,7 @@ class R36 {
     static get HAS_ALT_SCAN() { return true; }
 }
 
-class R72 extends R36 {
+export class R72 extends R36 {
     static get NAME() { return "Robot 72"; }
     static get LINE_WIDTH() { return 320; }
     static get SCAN_TIME() { return 0.138000; }
@@ -196,7 +225,7 @@ class R72 extends R36 {
     static get HAS_ALT_SCAN() { return false; }
 }
 
-const VIS_MAP = {
+export const VIS_MAP: { [key: number]: any } = {
     8: R36,
     12: R72,
     40: M2,
@@ -206,25 +235,11 @@ const VIS_MAP = {
     76: SDX
 };
 
-const BREAK_OFFSET = 0.300;
-const LEADER_OFFSET = 0.010 + BREAK_OFFSET;
-const VIS_START_OFFSET = 0.300 + LEADER_OFFSET;
+export const BREAK_OFFSET = 0.300;
+export const LEADER_OFFSET = 0.010 + BREAK_OFFSET;
+export const VIS_START_OFFSET = 0.300 + LEADER_OFFSET;
 
-const HDR_SIZE = 0.030 + VIS_START_OFFSET;
-const HDR_WINDOW_SIZE = 0.010;
+export const HDR_SIZE = 0.030 + VIS_START_OFFSET;
+export const HDR_WINDOW_SIZE = 0.010;
 
-const VIS_BIT_SIZE = 0.030;
-
-module.exports = {
-    COL_FMT,
-    M1, M2,
-    S1, S2, SDX,
-    R36, R72,
-    VIS_MAP,
-    BREAK_OFFSET,
-    LEADER_OFFSET,
-    VIS_START_OFFSET,
-    HDR_SIZE,
-    HDR_WINDOW_SIZE,
-    VIS_BIT_SIZE
-};
+export const VIS_BIT_SIZE = 0.030;

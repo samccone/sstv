@@ -2,18 +2,19 @@
  * Class and methods to decode SSTV signal
  */
 
-const fs = require('fs');
-const FFT = require('fft.js');
-const { PNG } = require('pngjs');
-const spec = require('./spec');
-const { log_message, progress_bar } = require('./common');
+import * as fs from 'fs';
+// @ts-ignore
+import FFT from 'fft.js';
+import { PNG } from 'pngjs';
+import * as spec from './spec';
+import { log_message, progress_bar } from './common';
 
-function calc_lum(freq) {
+function calc_lum(freq: number): number {
     const lum = Math.round((freq - 1500) / 3.1372549);
     return Math.min(Math.max(lum, 0), 255);
 }
 
-function barycentric_peak_interp(bins, x) {
+function barycentric_peak_interp(bins: Float32Array, x: number): number {
     const y1 = x <= 0 ? bins[x] : bins[x - 1];
     const y3 = x + 1 >= bins.length ? bins[x] : bins[x + 1];
 
@@ -23,7 +24,7 @@ function barycentric_peak_interp(bins, x) {
     return (y3 - y1) / denom + x;
 }
 
-function hann(length) {
+function hann(length: number): Float32Array {
     const window = new Float32Array(length);
     for (let i = 0; i < length; i++) {
         window[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (length - 1)));
@@ -31,14 +32,18 @@ function hann(length) {
     return window;
 }
 
-class SSTVDecoder {
-    constructor(samples, sampleRate) {
+export class SSTVDecoder {
+    mode: spec.SSTVMode | null;
+    _samples: Float32Array;
+    _sample_rate: number;
+
+    constructor(samples: Float32Array, sampleRate: number) {
         this.mode = null;
         this._samples = samples;
         this._sample_rate = sampleRate;
     }
 
-    decode(skip = 0.0) {
+    decode(skip: number = 0.0): PNG | null {
         if (skip > 0.0) {
             const skipSamples = Math.round(skip * this._sample_rate);
             this._samples = this._samples.slice(skipSamples);
@@ -59,14 +64,8 @@ class SSTVDecoder {
         return this._draw_image(image_data);
     }
 
-    _peak_fft_freq(data) {
+    _peak_fft_freq(data: Float32Array): number {
         const len = data.length;
-        // FFT size should be power of 2, usually next power of 2 or just len if it is power of 2
-        // But fft.js requires power of 2.
-        // The python code uses rfft on the exact length.
-        // We might need to zero pad or truncate.
-        // Ideally we want high resolution.
-        // Let's use next power of 2.
         let n = 1;
         while (n < len) n *= 2;
 
@@ -80,7 +79,6 @@ class SSTVDecoder {
 
         const out = f.createComplexArray();
         f.realTransform(out, input);
-        // f.completeSpectrum(out); // Not strictly needed for magnitude of first half
 
         const magnitudes = new Float32Array(n / 2 + 1);
         for (let i = 0; i < n / 2 + 1; i++) {
@@ -100,11 +98,10 @@ class SSTVDecoder {
 
         const peak = barycentric_peak_interp(magnitudes, x);
 
-        // Frequency resolution is sample_rate / n
         return peak * this._sample_rate / n;
     }
 
-    _find_header() {
+    _find_header(): number | null {
         const header_size = Math.round(spec.HDR_SIZE * this._sample_rate);
         const window_size = Math.round(spec.HDR_WINDOW_SIZE * this._sample_rate);
 
@@ -151,9 +148,9 @@ class SSTVDecoder {
         return null;
     }
 
-    _decode_vis(vis_start) {
+    _decode_vis(vis_start: number): spec.SSTVMode {
         const bit_size = Math.round(spec.VIS_BIT_SIZE * this._sample_rate);
-        const vis_bits = [];
+        const vis_bits: number[] = [];
 
         for (let bit_idx = 0; bit_idx < 8; bit_idx++) {
             const bit_offset = vis_start + bit_idx * bit_size;
@@ -168,8 +165,6 @@ class SSTVDecoder {
         }
 
         let vis_value = 0;
-        // Python: vis_bits[-2::-1] -> slice from second to last down to start, reversed
-        // JS: slice(0, 7).reverse()
         const bits_to_process = vis_bits.slice(0, 7).reverse();
         for (const bit of bits_to_process) {
             vis_value = (vis_value << 1) | bit;
@@ -185,7 +180,9 @@ class SSTVDecoder {
         return mode;
     }
 
-    _align_sync(align_start, start_of_sync = true) {
+    _align_sync(align_start: number, start_of_sync: boolean = true): number | null {
+        if (!this.mode) return null;
+
         const sync_window = Math.round(this.mode.SYNC_PULSE * 1.4 * this._sample_rate);
         const align_stop = this._samples.length - sync_window;
 
@@ -212,7 +209,9 @@ class SSTVDecoder {
         }
     }
 
-    _decode_image_data(image_start) {
+    _decode_image_data(image_start: number): number[][][] {
+        if (!this.mode) throw new Error("Mode not set");
+
         const window_factor = this.mode.WINDOW_FACTOR;
         let centre_window_time = (this.mode.PIXEL_TIME * window_factor) / 2;
         let pixel_window = Math.round(centre_window_time * 2 * this._sample_rate);
@@ -221,7 +220,7 @@ class SSTVDecoder {
         const channels = this.mode.CHAN_COUNT;
         const width = this.mode.LINE_WIDTH;
 
-        const image_data = new Array(height).fill(0).map(() =>
+        const image_data: number[][][] = new Array(height).fill(0).map(() =>
             new Array(channels).fill(0).map(() =>
                 new Array(width).fill(0)
             )
@@ -229,14 +228,15 @@ class SSTVDecoder {
 
         let seq_start = image_start;
         if (this.mode.HAS_START_SYNC) {
-            seq_start = this._align_sync(image_start, false);
-            if (seq_start === null) {
+            const result = this._align_sync(image_start, false);
+            if (result === null) {
                 throw new Error("Reached end of audio before image data");
             }
+            seq_start = result;
         }
 
         for (let line = 0; line < height; line++) {
-            if (this.mode.CHAN_SYNC > 0 && line === 0) {
+            if (this.mode.CHAN_SYNC !== undefined && this.mode.CHAN_SYNC > 0 && line === 0) {
                 const sync_offset = this.mode.CHAN_OFFSETS[this.mode.CHAN_SYNC];
                 seq_start -= Math.round((sync_offset + this.mode.SCAN_TIME) * this._sample_rate);
             }
@@ -247,17 +247,18 @@ class SSTVDecoder {
                         seq_start += Math.round(this.mode.LINE_TIME * this._sample_rate);
                     }
 
-                    seq_start = this._align_sync(seq_start);
-                    if (seq_start === null) {
+                    const result = this._align_sync(seq_start);
+                    if (result === null) {
                         log_message();
                         log_message("Reached end of audio whilst decoding.");
                         return image_data;
                     }
+                    seq_start = result;
                 }
 
                 let pixel_time = this.mode.PIXEL_TIME;
                 if (this.mode.HAS_HALF_SCAN) {
-                    if (chan > 0) {
+                    if (chan > 0 && this.mode.HALF_PIXEL_TIME) {
                         pixel_time = this.mode.HALF_PIXEL_TIME;
                     }
                     centre_window_time = (pixel_time * window_factor) / 2;
@@ -287,7 +288,9 @@ class SSTVDecoder {
         return image_data;
     }
 
-    _draw_image(image_data) {
+    _draw_image(image_data: number[][][]): PNG {
+        if (!this.mode) throw new Error("Mode not set");
+
         const width = this.mode.LINE_WIDTH;
         const height = this.mode.LINE_COUNT;
         const channels = this.mode.CHAN_COUNT;
@@ -304,64 +307,16 @@ class SSTVDecoder {
                 if (channels === 2) {
                     if (this.mode.HAS_ALT_SCAN) {
                         // R36
-                        // YUV
-                        const Y = image_data[y][0][x];
-                        const U = image_data[y - (odd_line - 1)][1][x]; // This index logic might need checking
-                        // In Python: image_data[y-(odd_line-1)][1][x]
-                        // if y=0 (even), odd_line=0. y-(-1) = 1. 
-                        // if y=1 (odd), odd_line=1. y-0 = 1.
-                        // Wait, let's trace Python logic carefully.
-                        // R36:
-                        // Line 0 (even): Y scan, then odd line color difference (R-Y, B-Y)
-                        // Actually R36/R72 send Y every line, but R-Y and B-Y alternate lines.
-                        // The python code:
-                        // pixel = (image_data[y][0][x], image_data[y-(odd_line-1)][1][x], image_data[y-odd_line][1][x])
-                        // This seems to be constructing a tuple (Y, U, V) or similar.
-                        // But wait, the Python code says:
-                        // if self.mode.COLOR == spec.COL_FMT.YUV:
-                        // pixel = (image_data[y][0][x], image_data[y-(odd_line-1)][1][x], image_data[y-odd_line][1][x])
-                        // It seems to be fetching Y from channel 0.
-                        // And the other two components from channel 1, but from different lines?
-                        // Actually channel 1 in R36 contains the chroma signal.
-                        // Let's just copy the logic exactly.
-
-                        // JS arrays don't support negative indexing like Python if it goes out of bounds, but here it seems to rely on specific structure.
-                        // However, `y-(odd_line-1)`: if y=0, odd_line=0 -> 0 - (-1) = 1.
-                        // if y=1, odd_line=1 -> 1 - 0 = 1.
-                        // So for y=0 and y=1, it uses index 1.
-                        // `y-odd_line`: if y=0 -> 0. if y=1 -> 0.
-                        // So for y=0 and y=1, it uses index 0.
-                        // But wait, `image_data` is `[line][channel][pixel]`.
-                        // So `image_data[1][1][x]` vs `image_data[0][1][x]`.
-
-                        // I will trust the Python logic and replicate the index calculation.
-                        // But I need to be careful about array bounds if y is at edges.
-                        // In R36, line count is 240.
+                        const Y_val = image_data[y][0][x];
 
                         const idx1 = y - (odd_line - 1);
                         const idx2 = y - odd_line;
 
-                        // Safety check
                         const val1 = (idx1 >= 0 && idx1 < height) ? image_data[idx1][1][x] : 128;
                         const val2 = (idx2 >= 0 && idx2 < height) ? image_data[idx2][1][x] : 128;
 
-                        // YUV to RGB conversion needed?
-                        // Python: "Let PIL do YUV-RGB conversion for us"
-                        // Here I have to do it manually.
-                        // Y = image_data[y][0][x]
-                        // U (Cb) and V (Cr) are the other two.
-                        // In Python code: `pixel = (Y, U, V)` (assuming order)
-                        // R36 uses Y, R-Y, B-Y.
-                        // Let's assume standard YCbCr conversion if PIL uses "YCbCr".
-
-                        const Y_val = image_data[y][0][x];
                         const U_val = val1;
                         const V_val = val2;
-
-                        // Convert YCbCr to RGB
-                        // R = Y + 1.402 * (V - 128)
-                        // G = Y - 0.344136 * (U - 128) - 0.714136 * (V - 128)
-                        // B = Y + 1.772 * (U - 128)
 
                         r = Y_val + 1.402 * (V_val - 128);
                         g = Y_val - 0.344136 * (U_val - 128) - 0.714136 * (V_val - 128);
@@ -369,16 +324,10 @@ class SSTVDecoder {
                     }
                 } else if (channels === 3) {
                     if (this.mode.COLOR === spec.COL_FMT.GBR) {
-                        // M1, M2, S1, S2, SDX
-                        // Python: (image_data[y][2][x], image_data[y][0][x], image_data[y][1][x])
-                        // So R=ch2, G=ch0, B=ch1
                         r = image_data[y][2][x];
                         g = image_data[y][0][x];
                         b = image_data[y][1][x];
                     } else if (this.mode.COLOR === spec.COL_FMT.YUV) {
-                        // R72
-                        // Python: (image_data[y][0][x], image_data[y][2][x], image_data[y][1][x])
-                        // Y=ch0, U=ch2, V=ch1 (Assuming PIL YCbCr order)
                         const Y_val = image_data[y][0][x];
                         const U_val = image_data[y][2][x];
                         const V_val = image_data[y][1][x];
@@ -405,5 +354,3 @@ class SSTVDecoder {
         return png;
     }
 }
-
-module.exports = SSTVDecoder;

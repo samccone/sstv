@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const wav = require('wav');
-const minimist = require('minimist');
-const SSTVDecoder = require('./decode');
-const { log_message } = require('./common');
+import * as fs from 'fs';
+// @ts-ignore
+import * as wav from 'wav';
+import minimist from 'minimist';
+import { SSTVDecoder } from './decode';
+import { log_message } from './common';
+import * as spec from './spec';
 
 const args = minimist(process.argv.slice(2), {
     string: ['output', 'decode'],
@@ -36,7 +38,6 @@ Options:
 }
 
 if (args['list-modes']) {
-    const spec = require('./spec');
     const modes = Object.values(spec.VIS_MAP).map(m => m.NAME).join(', ');
     console.log(`Supported modes: ${modes}`);
     process.exit(0);
@@ -54,11 +55,11 @@ const skip = parseFloat(args.skip);
 const file = fs.createReadStream(inputFile);
 const reader = new wav.Reader();
 
-const samples = [];
+const samples: Buffer[] = [];
 let sampleRate = 0;
-let wavFormat = null;
+let wavFormat: any = null;
 
-reader.on('format', function (format) {
+reader.on('format', function (format: any) {
     wavFormat = format;
     sampleRate = format.sampleRate;
     if (format.bitDepth !== 16 && format.bitDepth !== 8) {
@@ -67,16 +68,7 @@ reader.on('format', function (format) {
     }
 });
 
-reader.on('data', function (chunk) {
-    // Assuming 16-bit signed LE or 8-bit unsigned
-    // We need to convert to float -1.0 to 1.0
-    // And mix to mono if stereo
-
-    // We can't easily know the format here without storing it from 'format' event, 
-    // but 'data' might fire before 'format' in some streams? No, 'format' should be first for wav.Reader.
-    // But we need to access format info here.
-    // Actually wav.Reader emits 'format' then pipes data.
-    // Let's just collect buffer chunks and process at end to be safe and simple.
+reader.on('data', function (chunk: Buffer) {
     samples.push(chunk);
 });
 
@@ -88,7 +80,7 @@ reader.on('end', function () {
     const buffer = Buffer.concat(samples);
     const format = wavFormat;
 
-    let floatSamples;
+    let floatSamples: Float32Array;
     const numChannels = format.channels;
     const bitDepth = format.bitDepth;
     const numSamples = buffer.length / (bitDepth / 8) / numChannels;
@@ -120,7 +112,7 @@ reader.on('end', function () {
                     log_message(`Saved to ${outputFile}`);
                 });
         }
-    } catch (e) {
+    } catch (e: any) {
         log_message(`Error decoding: ${e.message}`, true);
     }
 });
