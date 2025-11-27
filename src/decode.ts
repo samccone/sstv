@@ -66,8 +66,9 @@ export class SSTVDecoder {
 
     _peak_fft_freq(data: Float32Array): number {
         const len = data.length;
-        let n = 1;
-        while (n < len) n *= 2;
+        // Use a fixed larger FFT size for better resolution
+        // 4096 gives ~11.7Hz resolution at 48kHz
+        const n = 4096;
 
         const f = new FFT(n);
         const input = new Array(n).fill(0);
