@@ -36,11 +36,23 @@ export class SSTVDecoder {
     mode: spec.SSTVMode | null;
     _samples: Float32Array;
     _sample_rate: number;
+    _fft: FFT;
+    _fft_input: Float32Array;
+    _fft_out: Float32Array;
+    _fft_magnitudes: Float32Array;
 
     constructor(samples: Float32Array, sampleRate: number) {
         this.mode = null;
         this._samples = samples;
         this._sample_rate = sampleRate;
+
+        // Use a fixed larger FFT size for better resolution
+        // 4096 gives ~11.7Hz resolution at 48kHz
+        const n = 4096;
+        this._fft = new FFT(n);
+        this._fft_input = new Float32Array(n);
+        this._fft_out = new Float32Array(2 * n);
+        this._fft_magnitudes = new Float32Array(n / 2 + 1);
     }
 
     decode(skip: number = 0.0): PNG | null {
@@ -66,40 +78,35 @@ export class SSTVDecoder {
 
     _peak_fft_freq(data: Float32Array): number {
         const len = data.length;
-        // Use a fixed larger FFT size for better resolution
-        // 4096 gives ~11.7Hz resolution at 48kHz
-        const n = 4096;
 
-        const f = new FFT(n);
-        const input = new Array(n).fill(0);
+        const f = this._fft;
+        const input = this._fft_input.fill(0);
         const window = hann(len);
 
         for (let i = 0; i < len; i++) {
             input[i] = data[i] * window[i];
         }
 
-        const out = f.createComplexArray();
+        const out = this._fft_out;
         f.realTransform(out, input);
 
-        const magnitudes = new Float32Array(n / 2 + 1);
-        for (let i = 0; i < n / 2 + 1; i++) {
-            const r = out[2 * i];
-            const i_val = out[2 * i + 1];
-            magnitudes[i] = Math.sqrt(r * r + i_val * i_val);
-        }
-
+        const magnitudes = this._fft_magnitudes;
         let max_mag = -1;
         let x = 0;
         for (let i = 0; i < magnitudes.length; i++) {
-            if (magnitudes[i] > max_mag) {
-                max_mag = magnitudes[i];
+            const r = out[2 * i];
+            const i_val = out[2 * i + 1];
+            const m = Math.sqrt(r * r + i_val * i_val);
+            if (m > max_mag) {
+                max_mag = m;
                 x = i;
             }
+            magnitudes[i] = m;
         }
 
         const peak = barycentric_peak_interp(magnitudes, x);
 
-        return peak * this._sample_rate / n;
+        return peak * this._sample_rate / f.size;
     }
 
     _find_header(): number | null {
