@@ -68,3 +68,33 @@ export function readWav(inputFile: string): Promise<AudioData> {
         file.pipe(reader);
     });
 }
+
+export function writeWav(outputFile: string, audioData: AudioData): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const writer = new wav.Writer({
+            channels: 1,
+            sampleRate: audioData.sampleRate,
+            bitDepth: 16
+        });
+
+        const file = fs.createWriteStream(outputFile);
+
+        writer.pipe(file);
+
+        const samples = audioData.samples;
+        const buffer = Buffer.alloc(samples.length * 2);
+
+        for (let i = 0; i < samples.length; i++) {
+            let s = Math.max(-1, Math.min(1, samples[i]));
+            s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            buffer.writeInt16LE(Math.round(s), i * 2);
+        }
+
+        writer.write(buffer);
+        writer.end();
+
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+        file.on('error', reject);
+    });
+}

@@ -7,11 +7,12 @@
     "sstv": "dist/bin.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "bun build ./src/bin.ts ./src/index.ts --outdir ./dist --target node"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Sam Saccone",
+  "license": "MIT",
   "dependencies": {
     "fft.js": "^4.0.4",
     "minimist": "^1.2.8",
